@@ -66,7 +66,7 @@ module ts {
             var stack: ts.Symbol[] = [];
             var locals = sourceFile.locals;
             for (let key in locals) {
-                locals[key]['ext.externName'] = locals[key].getName();
+                locals[key]['ext.externName'] = getName(locals[key]);
                 stack.push(locals[key]);
             }
 
@@ -78,9 +78,18 @@ module ts {
                 }
                 else {
                     for (var child of children) {
+                        child['ext.externName'] = sym['ext.externName'] + '.' + getName(child);
                         if(! child['ext.visited']) {
-                            child['ext.externName'] = sym['ext.externName'] + '.' + child.getName();
                             stack.push(child);
+                        }
+                        else {
+                            // still visit it as it's part of the parent symbol
+                            // for example:
+                            // declare var angular: ng.IAngularStatic;
+                            // interface IAngularStatic {
+                            //     config: () => void;
+                            // }
+                            visit(child);
                         }
                     }
                 }
@@ -90,6 +99,19 @@ module ts {
             // write the output extern file
             compilerHost.writeFile(externFile, writer.getText(), false);
             console.log(writer.getText());
+        }
+
+        function getName(sym: Symbol): string {
+            // for the Export = case
+            // declare angular {
+            //     export = angular;
+            // }
+            if (sym.declarations && sym.declarations[0] &&
+                sym.declarations[0]['isExportEquals']) {
+                return sym.declarations[0]['expressions']['text'];
+            }
+
+            return sym.getName();
         }
 
         function getChildren(sym: Symbol): Symbol[] {
